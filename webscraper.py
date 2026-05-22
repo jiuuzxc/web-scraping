@@ -23,7 +23,7 @@ from pathlib import Path
 from collections import Counter
 import random
 
-# ── Optional imports ─────────────────────────────────────────────────────────
+# Optional imports / dependencies
 try:
     import google.generativeai as genai;  GEMINI_AVAILABLE = True
 except ImportError:
@@ -39,7 +39,7 @@ try:
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# Constants
 DB_FILE     = "leads_database.json"
 ALL_FIELDS  = ["name","email","company","job_title","cellphone","telephone","linkedin","address"]
 EXPORT_COLS = ["record_id"] + ALL_FIELDS + ["source_url","scraped_at"]
@@ -51,6 +51,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
 ]
 
+# For Gemini AI 
 EXTRACT_PROMPT = """
 You are a lead extraction AI. Extract ALL business contacts from the content below.
 Return ONLY a valid JSON array. No markdown, no backticks, no explanation. Raw JSON only.
@@ -66,13 +67,12 @@ Content:
 """
 
 
-# ╔══════════════════════════════╗
-# ║  DATABASE                   ║
-# ╚══════════════════════════════╝
+# Database
 class LeadDatabase:
     def __init__(self):
         self.data = self._load()
 
+    # Load database
     def _load(self):
         if os.path.exists(DB_FILE):
             try:
@@ -82,14 +82,17 @@ class LeadDatabase:
                 pass
         return {"leads": [], "scraped_urls": []}
 
+    # Save current database
     def save(self):
         with open(DB_FILE, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
 
+    # Generate next record ID
     def _next_id(self):
         existing = [r.get("record_id", 0) for r in self.data["leads"] if isinstance(r.get("record_id"), int)]
         return (max(existing) + 1) if existing else 1
 
+    # Add/update new leads to the database
     def add_leads(self, leads):
         next_id = self._next_id()
         for i, lead in enumerate(leads):
@@ -106,9 +109,7 @@ class LeadDatabase:
         self.save()
 
 
-# ╔══════════════════════════════╗
-# ║  ASYNC SCRAPER              ║
-# ╚══════════════════════════════╝
+# Async Scraper - fetches page (aiohttp + Playwright)
 class AsyncScraper:
     def __init__(self, log_cb, delay=1.5):
         self.log = log_cb
@@ -156,9 +157,7 @@ class AsyncScraper:
         return BeautifulSoup(html, "html.parser")
 
 
-# ╔══════════════════════════════╗
-# ║  PATTERN EXTRACTOR (No AI)  ║
-# ╚══════════════════════════════╝
+# Pattern Extractor (Alternative for AI, not smart)
 class PatternExtractor:
     EMAIL_RE    = re.compile(r'[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}')
     PHONE_RE    = re.compile(r'(?<!\w)[\+\(]?[\d][\d\s\-\(\)\.]{6,18}[\d](?!\w)')
@@ -366,9 +365,7 @@ class PatternExtractor:
         return out
 
 
-# ╔══════════════════════════════╗
-# ║  AI EXTRACTOR (Gemini only) ║
-# ╚══════════════════════════════╝
+# AI Extractor (Gemini)
 class AIExtractor:
     def __init__(self, api_key, log_cb):
         self.log = log_cb
@@ -409,9 +406,7 @@ class AIExtractor:
             return []
 
 
-# ╔══════════════════════════════╗
-# ║  spaCy NER                  ║
-# ╚══════════════════════════════╝
+# spaCy NER (Named Entity Recognition, reads the text again to verify)
 class NERProcessor:
     def __init__(self, log_cb):
         self.log = log_cb
@@ -435,9 +430,7 @@ class NERProcessor:
         return [self.enhance(r, text) for r in records]
 
 
-# ╔══════════════════════════════╗
-# ║  DEDUPLICATOR               ║
-# ╚══════════════════════════════╝
+# Deduplicator (removes duplicate entities)
 class Deduplicator:
     def __init__(self, threshold=85):
         self.thr = threshold
@@ -469,9 +462,7 @@ class Deduplicator:
         return uniq, removed
 
 
-# ╔══════════════════════════════╗
-# ║  FILTER & NULL HANDLER      ║
-# ╚══════════════════════════════╝
+# Filters (applies selected filters and normalization)
 class LeadFilter:
     @staticmethod
     def apply_filters(records, active):
@@ -510,9 +501,7 @@ class LeadFilter:
         return records, 0
 
 
-# ╔══════════════════════════════╗
-# ║  CSV EXPORTER               ║
-# ╚══════════════════════════════╝
+# CSV Export
 class CSVExporter:
     @staticmethod
     def export(records, filepath):
@@ -523,9 +512,7 @@ class CSVExporter:
         return len(records)
 
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  GUI                                                         ║
-# ╚══════════════════════════════════════════════════════════════╝
+# GUI
 class WebScraperApp:
     def __init__(self, root):
         self.root = root
@@ -546,7 +533,7 @@ class WebScraperApp:
         self.log("🚀 WebScraper ready. Configure settings and start scraping.", "info")
         self.log(f"💾 Database: {len(self.db.all_leads()):,} existing leads loaded.", "info")
 
-    # ── Style ─────────────────────────────────────────────────────────────────
+    # Style
     def _styles(self):
         s = ttk.Style(); s.theme_use("clam")
         bg = "#1e1e2e"
@@ -574,7 +561,7 @@ class WebScraperApp:
         b.bind("<Leave>", lambda e: b.config(bg=bg))
         return b
 
-    # ── Build ─────────────────────────────────────────────────────────────────
+    # Build
     def _build(self):
         hdr = tk.Frame(self.root, bg="#181825", pady=10)
         hdr.pack(fill="x")
@@ -589,14 +576,13 @@ class WebScraperApp:
         self._tab_history(nb)
         self._tab_settings(nb)
 
-    # ─────────────────────────────────────────────────────────────────────────
+
     # TAB 1 — SCRAPER
-    # ─────────────────────────────────────────────────────────────────────────
     def _tab_scraper(self, nb):
         tab = ttk.Frame(nb)
         nb.add(tab, text="  🔍 Scraper  ")
 
-        # ── Left panel with scrollable canvas ────────────────────────────────
+        # Left panel with scrollable canvas 
         left_outer = tk.Frame(tab, bg="#1e1e2e", width=320)
         left_outer.pack(side="left", fill="y", padx=(6,3), pady=6)
         left_outer.pack_propagate(False)
@@ -635,11 +621,11 @@ class WebScraperApp:
 
         left.bind("<Map>", lambda e: _bind_mousewheel(left))
 
-        # ── Right panel ───────────────────────────────────────────────────────
+        # Right panel 
         right = tk.Frame(tab, bg="#1e1e2e")
         right.pack(side="left", fill="both", expand=True, padx=(3,6), pady=6)
 
-        # ── Extraction Mode ──────────────────────────────────────────────────
+        # Extraction Mode 
         mf = ttk.LabelFrame(left, text="🧠 Extraction Mode", padding=8)
         mf.pack(fill="x", pady=(0,6), padx=4)
         self.mode_var = tk.StringVar(value="pattern")
@@ -648,7 +634,7 @@ class WebScraperApp:
         ttk.Radiobutton(mf, text="🔍 Pattern Mode — No AI (fast, free, offline-capable)",
                         variable=self.mode_var, value="pattern").pack(anchor="w", pady=2)
 
-        # ── URL Input ────────────────────────────────────────────────────────
+        # URL Input 
         uf = ttk.LabelFrame(left, text="📌 URL Input", padding=8)
         uf.pack(fill="x", pady=(0,6), padx=4)
         tk.Label(uf, text="Single URL:", bg="#1e1e2e", fg="#a6adc8", font=("Segoe UI",9)).pack(anchor="w")
@@ -666,7 +652,7 @@ class WebScraperApp:
         ttk.Checkbutton(uf, text="Skip already-scraped URLs",
                         variable=self.skip_var).pack(anchor="w", pady=(4,0))
 
-        # ── Field Filters ────────────────────────────────────────────────────
+        # Field Filters 
         # Fields match EXPORT_COLS exactly
         ff = ttk.LabelFrame(left, text="🔽 Field Filters", padding=8)
         ff.pack(fill="x", pady=(0,6), padx=4)
@@ -691,7 +677,7 @@ class WebScraperApp:
             self.fvars[key] = v
             ttk.Checkbutton(ff, text=label, variable=v).pack(anchor="w", pady=1)
 
-        # ── Null Field Handling ───────────────────────────────────────────────
+        # Null Field Handling 
         nf = ttk.LabelFrame(left, text="⚙️ Null Field Handling", padding=8)
         nf.pack(fill="x", pady=(0,6), padx=4)
         tk.Label(nf, text="When a field is empty/null:", bg="#1e1e2e",
@@ -718,7 +704,7 @@ class WebScraperApp:
         self.ph_ent.pack(side="left", padx=(4,0), ipady=3)
         self._toggle_placeholder()
 
-        # ── CSV Output ────────────────────────────────────────────────────────
+        # CSV Output 
         cf = ttk.LabelFrame(left, text="📁 CSV Output", padding=8)
         cf.pack(fill="x", pady=(0,6), padx=4)
 
@@ -741,7 +727,7 @@ class WebScraperApp:
         ttk.Checkbutton(cf, text="Append timestamp to filename",
                         variable=self.ts_var).pack(anchor="w")
 
-        # ── Run Controls ──────────────────────────────────────────────────────
+        # Run Controls 
         rc = tk.Frame(left, bg="#1e1e2e")
         rc.pack(fill="x", pady=(4,6), padx=4)
         self.start_btn = self._btn(rc, "▶  Start Scraping", self._start, "#a6e3a1","#1e1e2e")
@@ -752,7 +738,7 @@ class WebScraperApp:
         self._btn(rc, "📥  Export CSV", self._export, "#89b4fa","#1e1e2e").pack(fill="x", pady=(0,4))
         self._btn(rc, "🗑  Clear Database", self._clear, "#585b70","#cdd6f4").pack(fill="x")
 
-        # ── Right: Progress + Log + Summary ──────────────────────────────────
+        # Right: Progress + Log + Summary 
         pf2 = tk.Frame(right, bg="#1e1e2e")
         pf2.pack(fill="x", pady=(0,6))
         tk.Label(pf2, text="Progress", bg="#1e1e2e", fg="#a6adc8", font=("Segoe UI",9)).pack(anchor="w")
@@ -785,9 +771,8 @@ class WebScraperApp:
             v = tk.Label(card, text="—", bg="#313244", fg="#89b4fa", font=("Segoe UI",13,"bold"))
             v.pack(); self.stats[key] = v
 
-    # ─────────────────────────────────────────────────────────────────────────
+
     # TAB 2 — HISTORY
-    # ─────────────────────────────────────────────────────────────────────────
     def _tab_history(self, nb):
         tab = ttk.Frame(nb); nb.add(tab, text="  🗂 History  ")
         ctrl = tk.Frame(tab, bg="#1e1e2e"); ctrl.pack(fill="x", padx=8, pady=6)
@@ -810,9 +795,8 @@ class WebScraperApp:
         xsb.pack(fill="x", padx=8, pady=(0,4))
         self._refresh()
 
-    # ─────────────────────────────────────────────────────────────────────────
+    
     # TAB 3 — SETTINGS
-    # ─────────────────────────────────────────────────────────────────────────
     def _tab_settings(self, nb):
         tab = ttk.Frame(nb); nb.add(tab, text="  ⚙️ Settings  ")
         wrap = tk.Frame(tab, bg="#1e1e2e"); wrap.pack(padx=20, pady=20, anchor="nw")
@@ -852,7 +836,7 @@ class WebScraperApp:
         )
         t.config(state="disabled"); t.pack(fill="x")
 
-    # ── UI helpers ────────────────────────────────────────────────────────────
+    # UI helpers
     def _toggle_placeholder(self):
         state = "normal" if self.null_var.get() == "placeholder" else "disabled"
         self.ph_ent.config(state=state)
@@ -909,7 +893,7 @@ class WebScraperApp:
         if not name.endswith(".csv"): name += ".csv"
         return os.path.join(self._out_folder, name)
 
-    # ── Start / Stop ──────────────────────────────────────────────────────────
+    # Start / Stop
     def _start(self):
         urls = self._get_urls()
         if not urls:
@@ -928,7 +912,7 @@ class WebScraperApp:
         self.is_running = False
         self.log("⏹ Stop requested…", "warning")
 
-    # ── Main pipeline ─────────────────────────────────────────────────────────
+    # Main pipeline 
     def _run(self, urls, mode, gk):
         try:
             loop = asyncio.new_event_loop()
@@ -951,11 +935,11 @@ class WebScraperApp:
             ner      = NERProcessor(self.log)
             dedup    = Deduplicator(threshold=self.dedup_var.get())
 
-            # ── Async fetch ───────────────────────────────────────────────────
+            # Async fetch 
             results  = loop.run_until_complete(scraper.scrape_all(urls, self._sp))
             if not self.is_running: self._done(); return
 
-            # ── Extract + NER enhance ─────────────────────────────────────────
+            # Extract + NER enhance
             all_records = []
             fetched = {u: h for u, h in results.items() if h}
             self._ss("urls", len(fetched))
@@ -982,19 +966,19 @@ class WebScraperApp:
             self.log(f"📦 Raw records: {len(all_records)}", "info")
             self._ss("found", len(all_records))
 
-            # ── Dedup ─────────────────────────────────────────────────────────
+            # Dedup 
             all_records, dups = dedup.run(all_records)
             self.log(f"🔁 Duplicates removed: {dups}", "warning" if dups else "info")
             self._ss("dups", dups)
             self._sp(80)
 
-            # ── Field filters ─────────────────────────────────────────────────
+            # Field filters 
             active  = [k for k,v in self.fvars.items() if v.get()]
             filtered = LeadFilter.apply_filters(all_records, active)
             self.log(f"🔽 After field filters: {len(filtered)}", "info")
             self._ss("filt", len(filtered))
 
-            # ── Null handling ─────────────────────────────────────────────────
+            # Null handling
             null_mode = self.null_var.get()
             ph        = self.ph_ent.get().strip() or "N/A"
             filtered, null_count = LeadFilter.handle_nulls(filtered, null_mode, ph)
@@ -1009,7 +993,7 @@ class WebScraperApp:
             self._ss("export", len(filtered))
             self._sp(95)
 
-            # ── Save to DB ────────────────────────────────────────────────────
+            # Save to DB 
             self.db.add_leads(filtered)
             self.current_leads = filtered
             total_db = len(self.db.all_leads())
@@ -1028,7 +1012,7 @@ class WebScraperApp:
         self.root.after(0, lambda: self.start_btn.config(state="normal"))
         self.root.after(0, lambda: self.stop_btn.config(state="disabled"))
 
-    # ── Export ─────────────────────────────────────────────────────────────────
+    # Export 
     def _do_export(self, path, leads):
         try:
             n = CSVExporter.export(leads, path)
@@ -1077,7 +1061,7 @@ class WebScraperApp:
         self._ss("total", f"{n:,}")
 
 
-# ── Entry point ────────────────────────────────────────────────────────────────
+# Entry point 
 if __name__ == "__main__":
     root = tk.Tk()
     WebScraperApp(root)
